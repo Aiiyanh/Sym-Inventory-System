@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resort Daily Inventory System</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-logo">🏨</div>
+      <div>
+        <div class="topbar-title">Resort Inventory</div>
+      </div>
+    </div>
+    <div class="topbar-date" id="top-date"></div>
+    <div class="topbar-right">
+      <div class="dept-toggle" id="dept-toggle">
+        <button class="dept-tab active" onclick="setDept('housekeeping')" id="tab-housekeeping">
+          <span class="dept-tab-icon">🧹</span><span class="dept-tab-label">Housekeeping</span>
+          <span class="dept-badge" id="badge-housekeeping">—</span>
+        </button>
+        <button class="dept-tab" onclick="setDept('bar')" id="tab-bar">
+          <span class="dept-tab-icon">🍹</span><span class="dept-tab-label">Bar</span>
+          <span class="dept-badge" id="badge-bar">—</span>
+        </button>
+        <button class="dept-tab" onclick="setDept('kitchen')" id="tab-kitchen">
+          <span class="dept-tab-icon">🍽️</span><span class="dept-tab-label">Kitchen</span>
+          <span class="dept-badge" id="badge-kitchen">—</span>
+        </button>
+        <button class="dept-tab" onclick="setDept('pizzeria')" id="tab-pizzeria">
+          <span class="dept-tab-icon">🍕</span><span class="dept-tab-label">Pizzeria</span>
+          <span class="dept-badge" id="badge-pizzeria">—</span>
+        </button>
+      </div>
+      <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-label">Views</div>
+      <button class="dept-btn active" onclick="setView('form')" id="btn-form">
+        <span class="dept-icon">📝</span> Entry Form
+      </button>
+      <button class="dept-btn" onclick="setView('report')" id="btn-report">
+        <span class="dept-icon">📊</span> Summary & Alerts
+      </button>
+      <button class="dept-btn" onclick="setView('purchase-report')" id="btn-purchase-report">
+        <span class="dept-icon">🧾</span> Purchase Order
+      </button>
+      <button class="dept-btn" onclick="setView('dashboard')" id="btn-dashboard" style="display:none;">
+        <span class="dept-icon">📈</span> Dashboard
+      </button>
+    </nav>
+
+    <main class="main" id="main-content"></main>
+  </div>
+
+  <script src="app-firebase.js"></script>
+</body>
+</html>
