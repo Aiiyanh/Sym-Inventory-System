@@ -1,16 +1,18 @@
 /* ═══════════════════════════════════════════════════════
    SERVICE WORKER — Sol Mar Inventory PWA
-   Strategy:
-   - App shell (HTML/CSS/JS/icons) → cache-first, so the app opens
-     instantly and works offline even with no signal.
-   - Everything else (Firestore calls, Google Fonts, Chart.js CDN)
-     → network-first, since inventory data must never be served stale
-     when a connection is available. Firestore's own SDK already
-     handles offline queuing/sync for the actual data writes.
-   Bump CACHE_VERSION whenever app-shell files change, so returning
-   devices pick up the new version instead of a stale cached one.
+   Strategy: network-first for everything, with a cache fallback
+   for offline use.
+   Previously the app shell (HTML/CSS/JS) used cache-first, which
+   caused a real bug: after deploying an update, returning users
+   (e.g. logging out then back in — just a page reload) kept seeing
+   the OLD cached version until they did a manual hard-refresh,
+   because cache-first never re-checks the network once something
+   is cached. Network-first fixes that — whenever there's a
+   connection, the latest deployed files are always fetched, and
+   the cache is only used as a fallback when actually offline.
+   Bump CACHE_VERSION on major changes to force-clear old caches.
 ═══════════════════════════════════════════════════════ */
-const CACHE_VERSION = 'solmar-inventory-v1';
+const CACHE_VERSION = 'solmar-inventory-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -48,27 +50,20 @@ self.addEventListener('fetch', event => {
   // own offline persistence handle that, so this SW doesn't fight it.
   if (url.hostname.includes('firestore.googleapis.com') ||
       url.hostname.includes('googleapis.com') ||
-      url.hostname.includes('gstatic.com') && !url.pathname.includes('firebasejs')) {
+      (url.hostname.includes('gstatic.com') && !url.pathname.includes('firebasejs'))) {
     return;
   }
 
-  const isAppShellFile = APP_SHELL.some(path => url.pathname.endsWith(path.replace('./', '/')) || (path === './' && url.pathname === '/'));
-
-  if (isAppShellFile) {
-    // Cache-first for the app shell — instant load, works offline.
-    event.respondWith(
-      caches.match(req).then(cached => cached || fetch(req))
-    );
-  } else {
-    // Network-first for everything else (CDN libs, fonts) with cache fallback.
-    event.respondWith(
-      fetch(req)
-        .then(res => {
-          const resClone = res.clone();
-          caches.open(CACHE_VERSION).then(cache => cache.put(req, resClone));
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
-  }
+  // Network-first, cache fallback — for the app shell AND everything else.
+  // Ensures logging out/in (a plain reload) always gets the latest deployed
+  // code when online, while still working offline from the last-cached copy.
+  event.respondWith(
+    fetch(req)
+      .then(res => {
+        const resClone = res.clone();
+        caches.open(CACHE_VERSION).then(cache => cache.put(req, resClone));
+        return res;
+      })
+      .catch(() => caches.match(req))
+  );
 });
