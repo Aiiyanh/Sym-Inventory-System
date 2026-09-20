@@ -453,6 +453,78 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .chart-row { display: none !important; }
 }
 
+/* ══════════════════════════════════════════
+   INSTALL PROMPT BANNER
+══════════════════════════════════════════ */
+.install-banner {
+  position: fixed;
+  left: 16px; right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 500;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  transform: translateY(calc(100% + 32px));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.install-banner.visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.install-banner-icon {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  flex-shrink: 0; object-fit: cover;
+}
+.install-banner-text {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.install-banner-text strong { font-size: 14px; color: var(--text-primary); }
+.install-banner-text span { font-size: 12px; color: var(--text-secondary); line-height: 1.35; }
+.install-banner-actions {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.install-banner-install-btn {
+  background: var(--accent); color: #fff; border: none;
+  border-radius: var(--radius-sm); padding: 8px 14px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+}
+.install-banner-install-btn:hover { opacity: 0.9; }
+.install-banner-dismiss-btn {
+  background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s;
+}
+.install-banner-dismiss-btn:hover { background: var(--bg); color: var(--text-primary); }
+
+@media (max-width: 480px) {
+  .install-banner {
+    left: 10px; right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+  .install-banner-text { flex-basis: 100%; order: 1; }
+  .install-banner-icon { order: 0; }
+  .install-banner-actions { order: 2; flex-basis: 100%; justify-content: flex-end; margin-top: 4px; }
+}
+
+@media print {
+  .install-banner { display: none !important; }
+}
+
 .step-tabs {
   display: flex;
   gap: 4px;

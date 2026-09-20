@@ -72,6 +72,19 @@
     <main class="main" id="main-content"></main>
   </div>
 
+  <!-- Install prompt banner: appears bottom of screen, dismissed permanently on "Got it" -->
+  <div id="install-banner" class="install-banner">
+    <img src="icon-192.png" alt="" class="install-banner-icon">
+    <div class="install-banner-text">
+      <strong>Install this app</strong>
+      <span id="install-banner-msg">Add it to your home screen for quick, offline-ready access.</span>
+    </div>
+    <div class="install-banner-actions">
+      <button id="install-banner-action" class="install-banner-install-btn">Install</button>
+      <button id="install-banner-dismiss" class="install-banner-dismiss-btn">Got it</button>
+    </div>
+  </div>
+
   <script src="app-firebase.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -80,6 +93,80 @@
           .catch(err => console.warn('Service worker registration failed:', err));
       });
     }
+  </script>
+
+  <script>
+  /* ── CUSTOM INSTALL PROMPT BANNER ──
+     Chrome/Edge fire `beforeinstallprompt`, which lets us trigger the real
+     native install dialog from our own "Install" button. iOS Safari has no
+     such API — installing there is only possible manually via the Share
+     sheet — so on iOS we instead show instructions with just a "Got it"
+     button. Dismissal is remembered in localStorage so it never nags
+     again on that device once closed (or once actually installed). */
+  (function () {
+    var DISMISS_KEY = 'solmar-install-banner-dismissed';
+    var banner      = document.getElementById('install-banner');
+    var msgEl       = document.getElementById('install-banner-msg');
+    var installBtn  = document.getElementById('install-banner-action');
+    var dismissBtn  = document.getElementById('install-banner-dismiss');
+    var deferredPrompt = null;
+
+    function isStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches ||
+             window.navigator.standalone === true; // iOS Safari's own flag
+    }
+    function isIos() {
+      return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    }
+    function isDismissed() {
+      try { return localStorage.getItem(DISMISS_KEY) === '1'; }
+      catch (e) { return false; }
+    }
+    function setDismissed() {
+      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+    }
+    function show() {
+      if (isStandalone() || isDismissed()) return;
+      banner.classList.add('visible');
+    }
+    function hide() {
+      banner.classList.remove('visible');
+    }
+
+    dismissBtn.addEventListener('click', function () {
+      setDismissed();
+      hide();
+    });
+
+    if (isIos()) {
+      // No install API on iOS — just show manual instructions, no Install button.
+      installBtn.style.display = 'none';
+      msgEl.textContent = 'Tap the Share icon, then "Add to Home Screen".';
+      if (!isStandalone()) show();
+    } else {
+      // Chrome/Edge (desktop & Android): capture the native prompt instead of
+      // letting the browser show its own mini-infobar, so ours is the only one.
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        show();
+      });
+
+      installBtn.addEventListener('click', function () {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.finally(function () {
+          deferredPrompt = null;
+          hide();
+        });
+      });
+    }
+
+    window.addEventListener('appinstalled', function () {
+      setDismissed();
+      hide();
+    });
+  })();
   </script>
 </body>
 </html>
