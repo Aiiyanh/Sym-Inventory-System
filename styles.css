@@ -344,24 +344,89 @@ body {
   body { background: white; }
 }
 
-@media (max-width: 640px) {
-  .topbar { padding: 0 1rem; }
-  .dept-toggle { max-width: 160px; }
-  .dept-tab-label { display: none; }
+/* ══════════════════════════════════════════
+   RESPONSIVE — phone / tablet / iPad
+   Breakpoints:
+     ≤1024px → tablets & iPad (portrait + split-view): tighter spacing,
+                sidebar narrows, tables scroll instead of crushing columns.
+     ≤860px  → iPad portrait / large phones landscape: sidebar moves from
+                a left column to a horizontal strip along the top.
+     ≤640px  → phones: labels/dates trimmed, inputs and buttons full-width,
+                touch targets enlarged.
+══════════════════════════════════════════ */
+
+/* ── ≤1024px: tablets & iPad ── */
+@media (max-width: 1024px) {
+  .main { padding: 1.5rem; }
+  .sidebar { width: 190px; }
+  .dept-toggle { max-width: 340px; }
+  .metrics-grid { grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); }
+  .dash-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+
+  /* Tables scroll horizontally inside their card instead of squeezing
+     columns unreadably thin — the card header stays full-width & fixed,
+     only the table body area gets a scrollbar when it's wider than the screen. */
+  .inv-card { overflow-x: auto; overflow-y: hidden; }
+  .inv-table, .log-table { min-width: 480px; }
+}
+
+/* ── ≤860px: sidebar becomes a horizontal strip (iPad portrait & down) ── */
+@media (max-width: 860px) {
+  .layout { flex-direction: column; }
   .sidebar {
     width: 100%; height: auto; position: static;
     display: flex; flex-direction: row; overflow-x: auto;
     padding: 0.5rem; border-right: none; border-bottom: 1px solid var(--border);
   }
   .sidebar-label { display: none; }
-  .layout { flex-direction: column; }
   .dept-btn {
     width: auto; white-space: nowrap; flex-shrink: 0;
     border-left: none; border-bottom: 3px solid transparent;
   }
   .dept-btn.active { border-left-color: transparent; border-bottom-color: var(--accent); }
-  .main { padding: 1rem; }
+  .section-header { align-items: flex-start; }
+  .submitter-row { width: 100%; }
+  .name-input { flex: 1; width: auto; }
+}
+
+/* ── ≤640px: phones ── */
+@media (max-width: 640px) {
+  .topbar { padding: 0 1rem; }
   .topbar-date { display: none; }
+  .dept-toggle { max-width: 160px; }
+  .dept-tab-label { display: none; }
+  .main { padding: 1rem; }
+
+  /* Roomier tap targets */
+  .theme-btn { width: 40px; height: 40px; }
+  .qty-input { width: 64px; padding: 8px 6px; }
+  .submit-btn, .next-btn, .print-btn { min-height: 42px; }
+
+  /* Section headers & forms stack instead of squeezing side by side */
+  .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .section-header h2 { font-size: 18px; }
+  .submitter-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .name-input { width: 100%; }
+  .submit-row { flex-direction: column-reverse; align-items: stretch; }
+  .submit-btn { justify-content: center; width: 100%; }
+
+  /* Tables: tighter padding so more fits before scrolling kicks in */
+  .inv-table th, .inv-table td, .log-table th, .log-table td { padding: 8px 10px; }
+  .inv-card-head { padding: 12px 14px; }
+  .inv-table, .log-table { min-width: 420px; }
+
+  /* Cards & metrics condensed for narrow screens */
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .metric-card { padding: 0.85rem 1rem; }
+  .metric-value { font-size: 22px; }
+  .success-card { padding: 2rem 1.25rem; }
+  .dash-stat { padding: 0.9rem 1rem; }
+  .chart-card-body { height: 220px; }
+  .chart-card-body.tall { height: 260px; }
+}
+
+@media print {
+  .chart-row { display: none !important; }
 }
 
 .step-tabs {
@@ -419,7 +484,7 @@ body {
   gap: 1.25rem;
   margin-bottom: 1.25rem;
 }
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .chart-row { grid-template-columns: 1fr; }
 }
 .chart-card {
@@ -458,7 +523,3 @@ body {
 }
 .needed-pill.critical { background: var(--danger-light); color: var(--danger); }
 .needed-pill.low { background: var(--warn-light); color: var(--warn); }
-
-@media print {
-  .chart-row { display: none !important; }
-}
