@@ -454,75 +454,75 @@ html, body { max-width: 100%; overflow-x: hidden; }
 }
 
 /* ══════════════════════════════════════════
-   INSTALL PROMPT BANNER
+   INSTALL PROMPT POP-UP (centered modal + backdrop)
 ══════════════════════════════════════════ */
-.install-banner {
+.install-backdrop {
   position: fixed;
-  left: 16px; right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  inset: 0;
   z-index: 10000; /* above #login-overlay (9999) so it also shows on the login screen */
+  background: rgba(0, 0, 0, 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+  transition: background 0.2s ease;
+}
+.install-backdrop.visible {
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+.install-banner {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  padding: 14px 16px;
+  padding: 24px 22px 20px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  max-width: 480px;
-  margin: 0 auto;
-  transform: translateY(calc(100% + 32px));
+  text-align: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  transform: scale(0.9);
   opacity: 0;
-  pointer-events: none;
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
-.install-banner.visible {
-  transform: translateY(0);
+.install-backdrop.visible .install-banner {
+  transform: scale(1);
   opacity: 1;
-  pointer-events: auto;
 }
 .install-banner-icon {
-  width: 40px; height: 40px; border-radius: var(--radius-sm);
-  flex-shrink: 0; object-fit: cover;
+  width: 56px; height: 56px; border-radius: var(--radius-md);
+  object-fit: cover;
 }
 .install-banner-text {
-  flex: 1; min-width: 0;
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 4px;
 }
-.install-banner-text strong { font-size: 14px; color: var(--text-primary); }
-.install-banner-text span { font-size: 12px; color: var(--text-secondary); line-height: 1.35; }
+.install-banner-text strong { font-size: 16px; color: var(--text-primary); }
+.install-banner-text span { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
 .install-banner-actions {
-  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; margin-top: 6px;
 }
 .install-banner-install-btn {
   background: var(--accent); color: #fff; border: none;
-  border-radius: var(--radius-sm); padding: 8px 14px;
-  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
-  cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+  cursor: pointer; width: 100%; transition: opacity 0.15s;
 }
 .install-banner-install-btn:hover { opacity: 0.9; }
 .install-banner-dismiss-btn {
   background: transparent; color: var(--text-muted); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 8px 12px;
-  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
-  cursor: pointer; white-space: nowrap; transition: all 0.15s;
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+  cursor: pointer; width: 100%; transition: all 0.15s;
 }
 .install-banner-dismiss-btn:hover { background: var(--bg); color: var(--text-primary); }
 
-@media (max-width: 480px) {
-  .install-banner {
-    left: 10px; right: 10px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    flex-wrap: wrap;
-    padding: 12px;
-  }
-  .install-banner-text { flex-basis: 100%; order: 1; }
-  .install-banner-icon { order: 0; }
-  .install-banner-actions { order: 2; flex-basis: 100%; justify-content: flex-end; margin-top: 4px; }
-}
-
 @media print {
-  .install-banner { display: none !important; }
+  .install-backdrop { display: none !important; }
 }
 
 .step-tabs {

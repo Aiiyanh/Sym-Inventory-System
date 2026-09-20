@@ -72,16 +72,18 @@
     <main class="main" id="main-content"></main>
   </div>
 
-  <!-- Install prompt banner: appears bottom of screen, dismissed permanently on "Got it" -->
-  <div id="install-banner" class="install-banner">
-    <img src="icon-192.png" alt="" class="install-banner-icon">
-    <div class="install-banner-text">
-      <strong>Install this app</strong>
-      <span id="install-banner-msg">Add it to your home screen for quick, offline-ready access.</span>
-    </div>
-    <div class="install-banner-actions">
-      <button id="install-banner-action" class="install-banner-install-btn">Install</button>
-      <button id="install-banner-dismiss" class="install-banner-dismiss-btn">Got it</button>
+  <!-- Install prompt pop-up: centered modal with dimmed backdrop -->
+  <div id="install-backdrop" class="install-backdrop">
+    <div id="install-banner" class="install-banner">
+      <img src="icon-192.png" alt="" class="install-banner-icon">
+      <div class="install-banner-text">
+        <strong>Install this app</strong>
+        <span id="install-banner-msg">Add it to your home screen for quick, offline-ready access.</span>
+      </div>
+      <div class="install-banner-actions">
+        <button id="install-banner-action" class="install-banner-install-btn">Install</button>
+        <button id="install-banner-dismiss" class="install-banner-dismiss-btn">Got it</button>
+      </div>
     </div>
   </div>
 
@@ -105,7 +107,7 @@
      it reappears on the next time the site is opened, unless the app has
      since actually been installed (checked via display-mode below). */
   (function () {
-    var banner      = document.getElementById('install-banner');
+    var backdrop    = document.getElementById('install-backdrop');
     var msgEl       = document.getElementById('install-banner-msg');
     var installBtn  = document.getElementById('install-banner-action');
     var dismissBtn  = document.getElementById('install-banner-dismiss');
@@ -120,13 +122,17 @@
     }
     function show() {
       if (isStandalone()) return;
-      banner.classList.add('visible');
+      backdrop.classList.add('visible');
     }
     function hide() {
-      banner.classList.remove('visible');
+      backdrop.classList.remove('visible');
     }
 
     dismissBtn.addEventListener('click', hide);
+    // Tapping the dimmed backdrop itself also dismisses, like a typical modal.
+    backdrop.addEventListener('click', function (e) {
+      if (e.target === backdrop) hide();
+    });
 
     if (isIos()) {
       // No install API on iOS — just show manual instructions, no Install button.
