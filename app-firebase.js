@@ -123,104 +123,118 @@ function saveToFirebase() {
   arrivedStock and soldStock start fresh at 0 for the new day.
   Custom items are also carried over so nothing is lost.
 */
-function applyCarryOver(yesterday) {
+function applyCarryOverForDept(dept, yesterday) {
   if (!yesterday) return;
-
-  const prevWeekly  = yesterday.weeklyStock  || {};
-  const prevArrived = yesterday.arrivedStock  || {};
-  const prevSold    = yesterday.soldStock     || {};
-  const prevCustom  = yesterday.customItems   || {};
+  const prevWeekly   = yesterday.weeklyStock    || {};
+  const prevArrived  = yesterday.arrivedStock   || {};
+  const prevSold     = yesterday.soldStock      || {};
+  const prevCustom   = yesterday.customItems    || {};
   const prevSections = yesterday.customSections || {};
 
-  Object.keys(DEPTS).forEach(dept => {
-    if (!weeklyStock[dept]) weeklyStock[dept] = {};
+  if (!weeklyStock[dept]) weeklyStock[dept] = {};
 
-    // Carry over custom sections so they aren't lost day-to-day
-    if (prevSections[dept] && prevSections[dept].length) {
-      if (!customSections[dept]) customSections[dept] = [];
-      prevSections[dept].forEach(name => {
-        if (!customSections[dept].includes(name)) customSections[dept].push(name);
-      });
-    }
-
-    // Carry over custom items first so keys stay consistent
-    if (prevCustom[dept] && prevCustom[dept].length) {
-      if (!customItems[dept]) customItems[dept] = [];
-      // Only add customs that don't already exist by name
-      prevCustom[dept].forEach(item => {
-        const exists = (customItems[dept] || []).some(c => c.name === item.name);
-        if (!exists) customItems[dept].push(item);
-      });
-    }
-
-    const allKeys = new Set([
-      ...Object.keys(prevWeekly[dept]  || {}),
-      ...Object.keys(prevArrived[dept] || {}),
-      ...Object.keys(prevSold[dept]    || {}),
-    ]);
-
-    allKeys.forEach(key => {
-      // Skip metadata keys
-      if (key.startsWith('_')) return;
-      const w = parseFloat((prevWeekly[dept]  || {})[key]) || 0;
-      const a = parseFloat((prevArrived[dept] || {})[key]) || 0;
-      const s = parseFloat((prevSold[dept]    || {})[key]) || 0;
-      const remaining = w + a - s;
-      // Only carry over if there was actual stock data
-      if ((prevWeekly[dept] || {})[key] !== undefined) {
-        weeklyStock[dept][key] = remaining;
-        weeklySubmitted[dept]  = true; // mark as pre-filled
-      }
+  if (prevSections[dept] && prevSections[dept].length) {
+    if (!customSections[dept]) customSections[dept] = [];
+    prevSections[dept].forEach(name => {
+      if (!customSections[dept].includes(name)) customSections[dept].push(name);
     });
-  });
+  }
 
-  showSyncBadge('📦 Yesterday\'s closing stock loaded as today\'s opening');
+  if (prevCustom[dept] && prevCustom[dept].length) {
+    if (!customItems[dept]) customItems[dept] = [];
+    prevCustom[dept].forEach(item => {
+      const exists = (customItems[dept] || []).some(c => c.name === item.name);
+      if (!exists) customItems[dept].push(item);
+    });
+  }
+
+  const allKeys = new Set([
+    ...Object.keys(prevWeekly[dept]  || {}),
+    ...Object.keys(prevArrived[dept] || {}),
+    ...Object.keys(prevSold[dept]    || {}),
+  ]);
+
+  allKeys.forEach(key => {
+    if (key.startsWith('_')) return;
+    const w = parseFloat((prevWeekly[dept]  || {})[key]) || 0;
+    const a = parseFloat((prevArrived[dept] || {})[key]) || 0;
+    const s = parseFloat((prevSold[dept]    || {})[key]) || 0;
+    const remaining = w + a - s;
+    if ((prevWeekly[dept] || {})[key] !== undefined) {
+      weeklyStock[dept][key] = remaining;
+      weeklySubmitted[dept]  = true;
+    }
+  });
 }
 
 function loadFromFirebase(callback) {
   showSyncBadge('🔄 Loading…');
   inventoryCol.doc(getDateKey()).get().then(docSnap => {
     const todayData = docSnap.exists ? docSnap.data() : null;
-    if (todayData) {
-      // Today already has data — just load it normally
-      mergeState(todayData);
-      showSyncBadge('✅ Data loaded');
+    if (todayData) mergeState(todayData);
+
+    // Per-department gap fill: even if today's document already exists
+    // (because another department saved first), each department that has
+    // NOTHING yet today gets its own backward search — so one department
+    // saving first never blocks another department's data from loading.
+    fillMissingDepts(recoveredAny => {
+      if (recoveredAny) {
+        saveToFirebase();
+        showSyncBadge('📦 Loaded your previously encoded data');
+      } else if (todayData) {
+        showSyncBadge('✅ Data loaded');
+      } else {
+        showSyncBadge('ℹ️ No previous data found in the last 120 days — starting fresh');
+      }
       if (callback) callback();
-    } else {
-      // No data for today — search backward (up to 14 days) for the most
-      // recent day that has data. This handles skipped days (e.g. the app
-      // wasn't opened yesterday), so nothing entered a few days ago gets lost.
-      findMostRecentPriorData(1, 14, (priorData, daysAgo) => {
-        if (priorData) {
-          applyCarryOver(priorData);
-          // Save the carried-over opening balance as today's starting point
-          saveToFirebase();
-          showSyncBadge(daysAgo === 1
-            ? '📦 Yesterday\'s closing stock loaded as today\'s opening'
-            : `📦 Closing stock from ${daysAgo} days ago loaded as today's opening`);
-        } else {
-          showSyncBadge('ℹ️ No previous data found in the last 14 days — starting fresh');
-        }
-        if (callback) callback();
-      });
-    }
+    });
   }).catch(err => {
     showSyncBadge('❌ Load failed: ' + err.message);
     if (callback) callback();
   });
 }
 
-/* Walks backward day-by-day from `startDaysAgo` up to `maxDaysAgo`,
-   returning the first day's data it finds (and how many days back it was). */
-function findMostRecentPriorData(startDaysAgo, maxDaysAgo, cb) {
+/* For every department that has literally nothing today (no custom items,
+   no custom sections, no weekly stock), search backward up to 120 days for
+   that department's own last saved data and carry it forward. Runs
+   per-department so one department's early save today can't block another
+   department's recovery. */
+function fillMissingDepts(cb) {
+  const needing = deptKeys.filter(dept => {
+    const hasItems    = (customItems[dept] || []).length > 0;
+    const hasSections  = (customSections[dept] || []).length > 0;
+    const hasWeekly    = weeklyStock[dept] && Object.keys(weeklyStock[dept]).length > 0;
+    return !hasItems && !hasSections && !hasWeekly;
+  });
+  if (!needing.length) { cb(false); return; }
+
+  let remaining = needing.length;
+  let recoveredAny = false;
+  needing.forEach(dept => {
+    findMostRecentDeptData(dept, 1, 120, (dayData) => {
+      if (dayData) {
+        applyCarryOverForDept(dept, dayData);
+        recoveredAny = true;
+      }
+      remaining--;
+      if (remaining === 0) cb(recoveredAny);
+    });
+  });
+}
+
+/* Walks backward day-by-day looking for the most recent day that has DATA
+   FOR THIS SPECIFIC DEPARTMENT (not just any data in the document at all). */
+function findMostRecentDeptData(dept, startDaysAgo, maxDaysAgo, cb) {
   inventoryCol.doc(getDateKeyOffset(startDaysAgo)).get().then(snap => {
     if (snap.exists) {
-      cb(snap.data(), startDaysAgo);
-    } else if (startDaysAgo >= maxDaysAgo) {
-      cb(null, null);
-    } else {
-      findMostRecentPriorData(startDaysAgo + 1, maxDaysAgo, cb);
+      const d = snap.data();
+      const hasItems   = d.customItems    && d.customItems[dept]    && d.customItems[dept].length > 0;
+      const hasSections = d.customSections && d.customSections[dept] && d.customSections[dept].length > 0;
+      const hasWeekly   = d.weeklyStock    && d.weeklyStock[dept]    && Object.keys(d.weeklyStock[dept]).length > 0;
+      if (hasItems || hasSections || hasWeekly) { cb(d, startDaysAgo); return; }
     }
+    if (startDaysAgo >= maxDaysAgo) { cb(null, null); return; }
+    findMostRecentDeptData(dept, startDaysAgo + 1, maxDaysAgo, cb);
   }).catch(() => cb(null, null));
 }
 
