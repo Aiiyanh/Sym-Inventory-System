@@ -460,7 +460,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
   position: fixed;
   left: 16px; right: 16px;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  z-index: 500;
+  z-index: 10000; /* above #login-overlay (9999) so it also shows on the login screen */
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
