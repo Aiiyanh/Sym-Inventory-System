@@ -630,6 +630,50 @@ function renderWeeklyForm() {
     </div>`;
   }
 
+  // Catch-all bucket for items with no section (and the Add Item / Add Section controls).
+  // Placed right below "Add New Section" so admins can add/see custom items before
+  // scrolling through every predefined section.
+  html += `<div class="inv-card">
+    <div class="inv-card-head" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>➕ Custom / Added Items</span>
+      ${getUserDept() === 'all' ? `
+        <button onclick="resetAllCustomItems()"
+          style="background:none;border:1px solid var(--danger);color:var(--danger);
+            border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;
+            cursor:pointer;text-transform:none;letter-spacing:0;">
+          🗑️ Reset All Custom Items (all depts)
+        </button>` : ''}
+    </div>
+    <table class="inv-table">
+      <thead><tr><th>Item</th><th style="width:140px;">Stock on hand</th><th style="width:80px;">Par</th><th style="width:110px;">Status</th><th style="width:40px;"></th></tr></thead>
+      <tbody id="custom-rows-${currentDept}">
+        ${unassigned.length ? unassigned.map(({ item, ii }) => customRow(item, ii)).join('') :
+          `<tr><td colspan="5" style="color:var(--text-muted);font-size:13px;">No unassigned items.</td></tr>`}
+      </tbody>
+    </table>
+    <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">
+      ${isAdmin ? `
+      <input class="name-input" type="text" placeholder="Start typing an item name…"
+        id="new-item-name-${currentDept}" style="width:180px;" list="item-suggestions-${currentDept}"
+        oninput="checkExistingItemName('${currentDept}')">
+      <datalist id="item-suggestions-${currentDept}">
+        ${getAllItemNames(currentDept).map(n => `<option value="${n}">`).join('')}
+      </datalist>
+      <input class="name-input" type="text" placeholder="Unit (e.g. pcs)"
+        id="new-item-unit-${currentDept}" style="width:100px;">
+      <input class="qty-input" type="number" min="0" placeholder="Par"
+        id="new-item-par-${currentDept}" style="width:80px;">
+      <select class="name-input" id="new-item-section-${currentDept}" style="width:190px;">
+        <option value="">— Unassigned (Custom / Added Items) —</option>
+        ${getSectionsForDept(currentDept).map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+      </select>
+      <button class="submit-btn" style="padding:6px 14px;font-size:13px;"
+        onclick="addCustomItem('${currentDept}')">+ Add Item</button>
+      ` : `<span style="font-size:13px;color:var(--text-muted);">Only admin/manager accounts can add new items. You can still update stock counts above.</span>`}
+    </div>
+    <div id="item-name-hint-${currentDept}" style="padding:0 16px 12px;font-size:12px;color:var(--warn);display:none;"></div>
+    </div>`;
+
   // Predefined sections (Linens, Bar, Kitchen, etc. — built into the department)
   // plus any custom items an admin has placed into them.
   d.sections.forEach((sec, si) => {
@@ -691,48 +735,6 @@ function renderWeeklyForm() {
       html += `</tbody></table></div>`;
     }
   });
-
-  // Catch-all bucket for items with no section (and the Add Item / Add Section controls)
-  html += `<div class="inv-card">
-    <div class="inv-card-head" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>➕ Custom / Added Items</span>
-      ${getUserDept() === 'all' ? `
-        <button onclick="resetAllCustomItems()"
-          style="background:none;border:1px solid var(--danger);color:var(--danger);
-            border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;
-            cursor:pointer;text-transform:none;letter-spacing:0;">
-          🗑️ Reset All Custom Items (all depts)
-        </button>` : ''}
-    </div>
-    <table class="inv-table">
-      <thead><tr><th>Item</th><th style="width:140px;">Stock on hand</th><th style="width:80px;">Par</th><th style="width:110px;">Status</th><th style="width:40px;"></th></tr></thead>
-      <tbody id="custom-rows-${currentDept}">
-        ${unassigned.length ? unassigned.map(({ item, ii }) => customRow(item, ii)).join('') :
-          `<tr><td colspan="5" style="color:var(--text-muted);font-size:13px;">No unassigned items.</td></tr>`}
-      </tbody>
-    </table>
-    <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">
-      ${isAdmin ? `
-      <input class="name-input" type="text" placeholder="Start typing an item name…"
-        id="new-item-name-${currentDept}" style="width:180px;" list="item-suggestions-${currentDept}"
-        oninput="checkExistingItemName('${currentDept}')">
-      <datalist id="item-suggestions-${currentDept}">
-        ${getAllItemNames(currentDept).map(n => `<option value="${n}">`).join('')}
-      </datalist>
-      <input class="name-input" type="text" placeholder="Unit (e.g. pcs)"
-        id="new-item-unit-${currentDept}" style="width:100px;">
-      <input class="qty-input" type="number" min="0" placeholder="Par"
-        id="new-item-par-${currentDept}" style="width:80px;">
-      <select class="name-input" id="new-item-section-${currentDept}" style="width:190px;">
-        <option value="">— Unassigned (Custom / Added Items) —</option>
-        ${getSectionsForDept(currentDept).map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
-      </select>
-      <button class="submit-btn" style="padding:6px 14px;font-size:13px;"
-        onclick="addCustomItem('${currentDept}')">+ Add Item</button>
-      ` : `<span style="font-size:13px;color:var(--text-muted);">Only admin/manager accounts can add new items. You can still update stock counts above.</span>`}
-    </div>
-    <div id="item-name-hint-${currentDept}" style="padding:0 16px 12px;font-size:12px;color:var(--warn);display:none;"></div>
-    </div>`;
 
   html += `<div class="notes-section">
     <div class="notes-label">📝 Notes / Remarks</div>
