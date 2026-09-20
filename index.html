@@ -101,10 +101,10 @@
      native install dialog from our own "Install" button. iOS Safari has no
      such API — installing there is only possible manually via the Share
      sheet — so on iOS we instead show instructions with just a "Got it"
-     button. Dismissal is remembered in localStorage so it never nags
-     again on that device once closed (or once actually installed). */
+     button. "Got it" only hides the banner for the current page view —
+     it reappears on the next time the site is opened, unless the app has
+     since actually been installed (checked via display-mode below). */
   (function () {
-    var DISMISS_KEY = 'solmar-install-banner-dismissed';
     var banner      = document.getElementById('install-banner');
     var msgEl       = document.getElementById('install-banner-msg');
     var installBtn  = document.getElementById('install-banner-action');
@@ -118,25 +118,15 @@
     function isIos() {
       return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
     }
-    function isDismissed() {
-      try { return localStorage.getItem(DISMISS_KEY) === '1'; }
-      catch (e) { return false; }
-    }
-    function setDismissed() {
-      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
-    }
     function show() {
-      if (isStandalone() || isDismissed()) return;
+      if (isStandalone()) return;
       banner.classList.add('visible');
     }
     function hide() {
       banner.classList.remove('visible');
     }
 
-    dismissBtn.addEventListener('click', function () {
-      setDismissed();
-      hide();
-    });
+    dismissBtn.addEventListener('click', hide);
 
     if (isIos()) {
       // No install API on iOS — just show manual instructions, no Install button.
@@ -162,10 +152,7 @@
       });
     }
 
-    window.addEventListener('appinstalled', function () {
-      setDismissed();
-      hide();
-    });
+    window.addEventListener('appinstalled', hide);
   })();
   </script>
 </body>
