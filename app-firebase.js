@@ -105,7 +105,7 @@ function saveToFirebase() {
   const payload = {
     weeklyStock, arrivedStock, soldStock,
     arrivedLog, eodLog, customItems, customSections,
-    weeklySubmitted, eodSubmitted,
+    weeklySubmitted, eodSubmitted, editUnlocked,
     lastSaved: new Date().toISOString()
   };
   inventoryCol.doc(getDateKey()).set(payload)
@@ -261,6 +261,7 @@ function mergeState(d) {
   Object.assign(customSections,  d.customSections  || {});
   Object.assign(weeklySubmitted, d.weeklySubmitted || {});
   Object.assign(eodSubmitted,    d.eodSubmitted    || {});
+  Object.assign(editUnlocked,    d.editUnlocked    || {});
   arrivedLog.length = 0; (d.arrivedLog || []).forEach(e => arrivedLog.push(e));
   eodLog.length     = 0; (d.eodLog     || []).forEach(e => eodLog.push(e));
 }
@@ -342,6 +343,7 @@ const customItems     = {};
 const customSections  = {}; // { dept: ['Toiletries', 'Extra Supplies', ...] } — admin-added section names per department
 const weeklySubmitted = {};
 const eodSubmitted    = {};
+const editUnlocked    = {}; // { dept: true } — set by admin/manager to let that dept edit an already-submitted Weekly Stock
 
 let currentDept  = 'housekeeping';
 let currentView  = 'form';   // matches HTML: 'form' | 'report'
@@ -541,15 +543,29 @@ function renderWeeklyForm() {
   const mc   = document.getElementById('main-content');
 
   if (weeklySubmitted[currentDept]) {
+    const isAdminUser = getUserDept() === 'all';
+    const unlocked     = !!editUnlocked[currentDept];
+    const canEdit      = isAdminUser || unlocked;
+
     mc.innerHTML = stepTabsHtml() + `
       <div class="success-card" style="display:block;max-width:500px;margin:2rem auto;">
-        <div class="success-icon">✅</div>
+        <div class="success-icon">${canEdit ? '✅' : '🔒'}</div>
         <h3>${d.label} weekly stock saved!</h3>
         <p>Stock counts recorded as the base inventory for this week.</p>
-        <button class="next-btn"
-          onclick="weeklySubmitted['${currentDept}']=false;renderWeeklyForm()">✏️ Edit</button>
+        ${!canEdit ? `
+          <p style="color:var(--text-secondary);font-size:13px;margin-top:8px;">
+            🔒 Locked — ask your manager or admin to unlock editing if this needs a correction.
+          </p>` : ''}
+        ${canEdit ? `
+          <button class="next-btn"
+            onclick="weeklySubmitted['${currentDept}']=false;renderWeeklyForm()">✏️ Edit</button>` : ''}
         <button class="next-btn" style="margin-top:8px;"
           onclick="setStep('addstock')">➕ Add Arrived Stock →</button>
+        ${isAdminUser ? `
+          <button class="next-btn" style="margin-top:8px;background:${unlocked ? 'var(--warn)' : 'var(--accent)'};"
+            onclick="toggleEditUnlock('${currentDept}')">
+            ${unlocked ? '🔒 Revoke edit access' : '🔓 Allow ' + d.label + ' to edit'}
+          </button>` : ''}
       </div>`;
     return;
   }
@@ -840,6 +856,17 @@ function requireName(inputId) {
   return name;
 }
 
+/* Admin/manager grants or revokes a department's ability to edit an
+   already-submitted Weekly Stock entry. Saved immediately so the change
+   reaches that department's session in real time via onSnapshot. */
+function toggleEditUnlock(dept) {
+  if (getUserDept() !== 'all') return; // guard: only admin/manager can call this
+  editUnlocked[dept] = !editUnlocked[dept];
+  saveToFirebase();
+  renderWeeklyForm();
+}
+window.toggleEditUnlock = toggleEditUnlock;
+
 function submitWeekly(dept) {
   const name = requireName('wname-' + dept);
   if (!name) return;
@@ -862,6 +889,7 @@ function submitWeekly(dept) {
   weeklyStock[dept]['_notes'] = notesEl ? notesEl.value : '';
   weeklyStock[dept]['_time']  = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   weeklySubmitted[dept] = true;
+  editUnlocked[dept] = false; // re-lock automatically once the correction has been made
   updateBadge(dept);
   saveToFirebase();
   setStep('addstock'); // jump straight into Add Arrived Stock after weekly stock is saved
@@ -1178,6 +1206,7 @@ function renderReport() {
   const mc = document.getElementById('main-content');
   let total = 0, ok = 0, low = 0, crit = 0;
   const alerts = [];
+  const anomalies = [];
 
   const allowedDepts = getAllowedDepts();
 
@@ -1186,10 +1215,30 @@ function renderReport() {
       const key = `${si}_${ii}`;
       if ((weeklyStock[dk] || {})[key] === undefined) return;
       total++;
-      const st = getStatus(getRunningStock(dk, key), item.par);
+      const remaining = getRunningStock(dk, key);
+      const st = getStatus(remaining, item.par);
       if (st.cls === 's-ok')       ok++;
-      else if (st.cls === 's-low') { low++;  alerts.push({ dept: DEPTS[dk].label, item: item.name, qty: getRunningStock(dk, key), par: item.par, unit: item.unit, level: 'low'      }); }
-      else                         { crit++; alerts.push({ dept: DEPTS[dk].label, item: item.name, qty: getRunningStock(dk, key), par: item.par, unit: item.unit, level: 'critical'  }); }
+      else if (st.cls === 's-low') { low++;  alerts.push({ dept: DEPTS[dk].label, item: item.name, qty: remaining, par: item.par, unit: item.unit, level: 'low'      }); }
+      else                         { crit++; alerts.push({ dept: DEPTS[dk].label, item: item.name, qty: remaining, par: item.par, unit: item.unit, level: 'critical'  }); }
+
+      // ── Anomaly checks: impossible values that indicate a data-entry error ──
+      const w = parseFloat((weeklyStock[dk]  || {})[key]) || 0;
+      const a = parseFloat((arrivedStock[dk] || {})[key]) || 0;
+      const s = parseFloat((soldStock[dk]    || {})[key]) || 0;
+
+      if (remaining < 0) {
+        anomalies.push({
+          dept: DEPTS[dk].label, item: item.name, unit: item.unit,
+          type: 'negative',
+          detail: `Remaining stock is negative (${remaining} ${item.unit}): opening ${w} + arrived ${a} − sold ${s}.`
+        });
+      } else if (s > (w + a)) {
+        anomalies.push({
+          dept: DEPTS[dk].label, item: item.name, unit: item.unit,
+          type: 'oversold',
+          detail: `Sold more than was available: sold ${s} ${item.unit} vs. opening ${w} + arrived ${a} = ${w + a} ${item.unit} on hand.`
+        });
+      }
     });
   });
 
@@ -1206,7 +1255,21 @@ function renderReport() {
       <div class="metric-card"><div class="metric-label">OK</div><div class="metric-value mv-ok">${ok}</div></div>
       <div class="metric-card"><div class="metric-label">Low stock</div><div class="metric-value mv-warn">${low}</div></div>
       <div class="metric-card"><div class="metric-label">Critical</div><div class="metric-value mv-danger">${crit}</div></div>
+      <div class="metric-card"><div class="metric-label">Anomalies</div><div class="metric-value mv-danger">${anomalies.length}</div></div>
     </div>`;
+
+  if (anomalies.length) {
+    html += `<div class="alert-section"><div class="alert-title">🚫 Data anomalies — check these entries</div>`;
+    anomalies.forEach(an => {
+      html += `<div class="alert-item critical">
+        <div class="alert-icon">${an.type === 'negative' ? '⚠️' : '🚫'}</div>
+        <div class="alert-item-text">
+          <div class="alert-item-name">${an.dept} › ${an.item}</div>
+          <div class="alert-item-detail">${an.detail}</div>
+        </div></div>`;
+    });
+    html += `</div>`;
+  }
 
   if (alerts.length === 0) {
     html += `<div class="all-clear"><div class="all-clear-icon">✅</div>
