@@ -14,7 +14,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 // Guard against re-applying settings on hot-reload (fires the "overriding the original host" warning otherwise)
 if (!window.__firestoreSettingsApplied) {
-  db.settings({ ignoreUndefinedProperties: true }); // Firestore rejects `undefined` fields by default; RTDB didn't care
+  db.settings({ ignoreUndefinedProperties: true, merge: true }); // Firestore rejects `undefined` fields by default; RTDB didn't care
   window.__firestoreSettingsApplied = true;
 }
 const inventoryCol = db.collection('inventory');
@@ -34,6 +34,57 @@ function formatLocalDateKey(d) {
 
 function getDateKey() {
   return formatLocalDateKey(new Date()); // "YYYY-MM-DD" in local time
+}
+
+/* ── CLOCK SANITY CHECK ──
+   Every date key comes from the device's own clock (see getDateKey above).
+   If a device's date/time is wrong, it silently reads and writes the WRONG
+   document — data looks "missing" even though it's sitting in Firestore
+   under a different date. This check compares the device clock against
+   Firestore's server clock and shows a hard-to-miss banner if they disagree
+   by more than a day, BEFORE any data gets saved under a bad key. */
+function checkClockSanity() {
+  const ref = db.collection('_system').doc('clockcheck');
+  const localTimeAtRequest = Date.now();
+  ref.set({ ts: firebase.firestore.FieldValue.serverTimestamp() })
+    .then(() => ref.get())
+    .then(snap => {
+      const serverMs = snap.data().ts.toMillis();
+      const localMs = Date.now();
+      // account for round-trip time by comparing against the midpoint
+      const roundTrip = localMs - localTimeAtRequest;
+      const adjustedLocal = localTimeAtRequest + roundTrip / 2;
+      const driftMs = adjustedLocal - serverMs;
+      const driftDays = driftMs / 86400000;
+
+      if (Math.abs(driftDays) >= 1) {
+        showClockWarning(driftDays);
+      }
+    })
+    .catch(err => {
+      // Non-fatal — if the check itself fails (offline, permissions), don't block the app
+      console.warn('Clock sanity check failed:', err.message);
+    });
+}
+
+function showClockWarning(driftDays) {
+  const direction = driftDays > 0 ? 'ahead of' : 'behind';
+  const days = Math.round(Math.abs(driftDays));
+  const banner = document.createElement('div');
+  banner.id = 'clock-warning-banner';
+  banner.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    background: #b91c1c; color: #fff; font-weight: 600;
+    padding: 10px 16px; text-align: center; font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  `;
+  banner.innerHTML = `⚠️ This device's date/time is ${days} day(s) ${direction} the real date.
+    Data entered now will be saved under the wrong day and may appear "missing" later.
+    Please fix the date/time in your device settings, then reload this page.
+    <button onclick="this.parentElement.remove()" style="
+      margin-left:12px; background:rgba(255,255,255,0.2); border:none; color:#fff;
+      border-radius:4px; padding:2px 10px; cursor:pointer;">Dismiss</button>`;
+  document.body.prepend(banner);
 }
 
 function getYesterdayKey() {
@@ -1975,6 +2026,9 @@ function bootApp() {
     `;
     topbarBrand.appendChild(logoutEl);
   }
+
+  // ── Catch a bad device clock before it causes a mismatched-date save ──
+  checkClockSanity();
 
   // ── Load Firebase → render → subscribe ──
   loadFromFirebase(() => {
