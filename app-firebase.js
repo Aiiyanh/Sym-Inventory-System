@@ -790,6 +790,9 @@ function addCustomItem(dept) {
 
 function removeCustomItem(dept, idx) {
   if (getUserDept() !== 'all') { alert('Only admin/manager accounts can remove items.'); return; }
+  const item = (customItems[dept] || [])[idx];
+  if (!item) return;
+  if (!confirm(`Remove item "${item.name}"? Its recorded stock quantities for this item will also be deleted.\n\nThis cannot be undone. Continue?`)) return;
   if (customItems[dept]) {
     customItems[dept].splice(idx, 1);
     if (weeklyStock[dept]) {
