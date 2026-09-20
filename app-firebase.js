@@ -2093,12 +2093,13 @@ function bootApp() {
     const currentUser = sessionStorage.getItem(SESSION_KEY + '-user') || 'User';
     const deptLabel   = userDept === 'all' ? 'All Departments' : (DEPTS[userDept] ? DEPTS[userDept].icon + ' ' + DEPTS[userDept].label : userDept);
     const logoutEl    = document.createElement('div');
-    logoutEl.style.cssText = 'font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-left:12px;';
+    logoutEl.className = 'topbar-userinfo';
+    logoutEl.style.cssText = 'font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-left:12px;min-width:0;';
     logoutEl.innerHTML = `
-      <span>👤 <strong>${currentUser}</strong> &nbsp;·&nbsp; ${deptLabel}</span>
-      <button onclick="logout()" style="
+      <span class="topbar-userinfo-text">👤 <strong>${currentUser}</strong> <span class="topbar-userinfo-dept">&nbsp;·&nbsp;${deptLabel}</span></span>
+      <button onclick="logout()" class="topbar-logout-btn" style="
         background:none;border:1px solid var(--border);border-radius:6px;
-        padding:3px 10px;font-size:11px;cursor:pointer;
+        padding:3px 10px;font-size:11px;cursor:pointer;flex-shrink:0;
         color:var(--text-muted);font-weight:600;">Logout</button>
     `;
     topbarBrand.appendChild(logoutEl);

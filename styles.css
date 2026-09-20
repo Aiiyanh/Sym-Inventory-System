@@ -59,6 +59,10 @@ body {
   font-size: 15px;
   transition: background 0.2s, color 0.2s;
 }
+/* Safety net: no single component's layout miscalculation should ever be
+   able to widen the whole page and force a mobile browser to zoom/shift
+   everything to fit it. */
+html, body { max-width: 100%; overflow-x: hidden; }
 
 /* TOP BAR */
 .topbar {
@@ -75,16 +79,25 @@ body {
   box-shadow: var(--shadow);
   gap: 12px;
 }
-.topbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.topbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 1; min-width: 0; }
 .topbar-logo {
   width: 32px; height: 32px; background: var(--accent);
   border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-size: 16px;
 }
-.topbar-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.topbar-title { font-size: 16px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 .topbar-date { font-size: 13px; color: var(--text-muted); font-family: 'DM Mono', monospace; flex: 1; text-align: center; }
 .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+/* User info + logout, injected next to the logo/title. Must be able to
+   shrink and truncate rather than forcing the whole top bar (and page)
+   wider than the viewport on narrow screens. */
+.topbar-userinfo { min-width: 0; overflow: hidden; }
+.topbar-userinfo-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: inline-block; max-width: 100%; vertical-align: middle;
+}
 
 .view-toggle { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
 .view-btn {
@@ -377,6 +390,10 @@ body {
     width: 100%; height: auto; position: static;
     display: flex; flex-direction: row; overflow-x: auto;
     padding: 0.5rem; border-right: none; border-bottom: 1px solid var(--border);
+    /* Fade the right edge so it's visually obvious there's more to scroll
+       to (e.g. "Purchase Order") rather than the tab just looking cut off. */
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+            mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
   }
   .sidebar-label { display: none; }
   .dept-btn {
@@ -396,6 +413,13 @@ body {
   .dept-toggle { max-width: 160px; }
   .dept-tab-label { display: none; }
   .main { padding: 1rem; }
+
+  /* Prevent the user-info block (injected next to the logo) from ever
+     pushing the top bar wider than the phone screen: drop the department
+     label first, then shrink the title, keeping just name + logout. */
+  .topbar-userinfo-dept { display: none; }
+  .topbar-title { font-size: 14px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-logo { width: 28px; height: 28px; font-size: 14px; }
 
   /* Roomier tap targets */
   .theme-btn { width: 40px; height: 40px; }
