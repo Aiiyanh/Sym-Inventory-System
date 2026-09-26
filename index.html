@@ -48,7 +48,16 @@
           <span class="dept-badge" id="badge-pizzeria">—</span>
         </button>
       </div>
-      <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
+      <div class="menu-wrap" id="menu-wrap">
+        <button class="menu-btn" id="menu-btn" onclick="toggleMenuPanel()" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">☰</button>
+        <div class="menu-panel" id="menu-panel">
+          <div class="menu-userinfo" id="menu-userinfo"></div>
+          <button class="menu-item" id="menu-theme-item" onclick="toggleTheme()">
+            <span id="menu-theme-icon">🌙</span><span id="menu-theme-label">Dark Mode</span>
+          </button>
+          <button class="menu-item menu-item-danger" onclick="logout()">🚪 Logout</button>
+        </div>
+      </div>
     </div>
   </div>
 

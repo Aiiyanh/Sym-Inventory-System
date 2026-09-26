@@ -277,21 +277,50 @@ function showSyncBadge(msg) {
 }
 
 /* ── THEME ── */
+function updateThemeMenuLabel(theme) {
+  const icon  = document.getElementById('menu-theme-icon');
+  const label = document.getElementById('menu-theme-label');
+  if (icon)  icon.textContent  = theme === 'dark' ? '☀️' : '🌙';
+  if (label) label.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+}
 function toggleTheme() {
   const html = document.documentElement;
   const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   html.setAttribute('data-theme', next);
-  document.getElementById('theme-btn').textContent = next === 'dark' ? '☀️' : '🌙';
+  updateThemeMenuLabel(next);
   localStorage.setItem('resort-theme', next);
+  closeMenuPanel();
 }
 (function initTheme() {
   const saved = localStorage.getItem('resort-theme') || 'light';
   document.documentElement.setAttribute('data-theme', saved);
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('theme-btn');
-    if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
-  });
+  document.addEventListener('DOMContentLoaded', () => updateThemeMenuLabel(saved));
 })();
+
+/* ── BURGER MENU (dark mode + logout) ──
+   One compact button instead of a separate theme toggle and an
+   inline "Name · Dept  Logout" block, so the top bar doesn't run out
+   of room on narrow phones and logout is always reachable. */
+function toggleMenuPanel() {
+  const wrap = document.getElementById('menu-wrap');
+  const btn  = document.getElementById('menu-btn');
+  if (!wrap) return;
+  const opening = !wrap.classList.contains('open');
+  wrap.classList.toggle('open', opening);
+  if (btn) btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+}
+function closeMenuPanel() {
+  const wrap = document.getElementById('menu-wrap');
+  const btn  = document.getElementById('menu-btn');
+  if (wrap) wrap.classList.remove('open');
+  if (btn)  btn.setAttribute('aria-expanded', 'false');
+}
+// Close the menu on an outside click/tap, or on Escape.
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('menu-wrap');
+  if (wrap && wrap.classList.contains('open') && !wrap.contains(e.target)) closeMenuPanel();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenuPanel(); });
 
 /* ── DEPARTMENT DATA ──
    Predefined items removed on request — sections stay as empty groupings.
@@ -2141,22 +2170,13 @@ function bootApp() {
     topbarRight.insertBefore(badge, topbarRight.firstChild);
   }
 
-  // ── Inject user info + logout in topbar ──
-  const topbarBrand = document.querySelector('.topbar-brand');
-  if (topbarBrand) {
+  // ── Show user name + dept inside the burger menu (name/logout no longer
+  //    live in the top bar itself — see toggleMenuPanel) ──
+  const menuUserInfo = document.getElementById('menu-userinfo');
+  if (menuUserInfo) {
     const currentUser = sessionStorage.getItem(SESSION_KEY + '-user') || 'User';
     const deptLabel   = userDept === 'all' ? 'All Departments' : (DEPTS[userDept] ? DEPTS[userDept].icon + ' ' + DEPTS[userDept].label : userDept);
-    const logoutEl    = document.createElement('div');
-    logoutEl.className = 'topbar-userinfo';
-    logoutEl.style.cssText = 'font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-left:12px;min-width:0;';
-    logoutEl.innerHTML = `
-      <span class="topbar-userinfo-text">👤 <strong>${currentUser}</strong> <span class="topbar-userinfo-dept">&nbsp;·&nbsp;${deptLabel}</span></span>
-      <button onclick="logout()" class="topbar-logout-btn" style="
-        background:none;border:1px solid var(--border);border-radius:6px;
-        padding:3px 10px;font-size:11px;cursor:pointer;flex-shrink:0;
-        color:var(--text-muted);font-weight:600;">Logout</button>
-    `;
-    topbarBrand.appendChild(logoutEl);
+    menuUserInfo.innerHTML = `👤 <strong>${currentUser}</strong><br>${deptLabel}`;
   }
 
   // ── Catch a bad device clock before it causes a mismatched-date save ──
@@ -2204,6 +2224,8 @@ window.loadFromFirebase = loadFromFirebase;
 window.attemptLogin     = attemptLogin;
 window.toggleLoginPw    = toggleLoginPw;
 window.logout           = logout;
+window.toggleMenuPanel  = toggleMenuPanel;
+window.closeMenuPanel   = closeMenuPanel;
 
 /* ── INIT ── */
 document.addEventListener('DOMContentLoaded', () => {
