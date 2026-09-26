@@ -534,6 +534,55 @@ function stepTabsHtml() {
     `</div>`;
 }
 
+/* ── INVENTORY SEARCH (product name + section name) ──
+   Reused across all three entry-form steps (Weekly Stock, Add Stock, End of Day).
+   Filters DOM in place after render — no re-render needed, so it doesn't
+   touch any saved values. Matches if the item name OR the section it's in
+   contains the query; a section-name match reveals every item in it. */
+function inventorySearchHtml() {
+  return `<div class="inv-search-bar" id="inv-search-bar">
+    <span class="inv-search-icon">🔍</span>
+    <input type="text" id="inv-search-input" class="inv-search-input"
+      placeholder="Search by product or section…" autocomplete="off"
+      oninput="filterInventoryItems(this.value)">
+    <button type="button" class="inv-search-clear" title="Clear search"
+      onclick="const i=document.getElementById('inv-search-input');i.value='';filterInventoryItems('');i.focus();">✕</button>
+  </div>`;
+}
+
+function filterInventoryItems(rawQuery) {
+  const query = (rawQuery || '').trim().toLowerCase();
+  const bar   = document.getElementById('inv-search-bar');
+  if (bar) bar.classList.toggle('has-query', query.length > 0);
+
+  const mc = document.getElementById('main-content');
+  if (!mc) return;
+
+  mc.querySelectorAll('.inv-card').forEach(card => {
+    const table = card.querySelector('table.inv-table');
+    if (!table) return; // leave non-product cards (e.g. "Add New Section") alone
+
+    const headEl      = card.querySelector('.inv-card-head');
+    const headText     = headEl ? headEl.textContent.toLowerCase() : '';
+    const sectionMatch = !query || headText.includes(query);
+
+    let anyRowVisible = false;
+    table.querySelectorAll('tbody > tr').forEach(row => {
+      const nameEl = row.querySelector('.item-name');
+      if (!nameEl) {
+        // placeholder rows like "No items yet" — follow the section match
+        row.style.display = sectionMatch ? '' : 'none';
+        return;
+      }
+      const itemMatch = sectionMatch || nameEl.textContent.toLowerCase().includes(query);
+      row.style.display = itemMatch ? '' : 'none';
+      if (itemMatch) anyRowVisible = true;
+    });
+
+    card.style.display = (sectionMatch || anyRowVisible) ? '' : 'none';
+  });
+}
+
 /* ══════════════════════════════════════════
    STEP 1 — WEEKLY STOCK
 ══════════════════════════════════════════ */
@@ -570,7 +619,7 @@ function renderWeeklyForm() {
     return;
   }
 
-  let html = stepTabsHtml() + `
+  let html = stepTabsHtml() + inventorySearchHtml() + `
     <div class="section-header">
       <div>
         <h2>${d.icon} ${d.label} — Weekly Stock Entry</h2>
@@ -907,7 +956,7 @@ function renderAddStockForm() {
   const d  = DEPTS[currentDept];
   const mc = document.getElementById('main-content');
 
-  let html = stepTabsHtml() + `
+  let html = stepTabsHtml() + inventorySearchHtml() + `
     <div class="section-header">
       <div>
         <h2>${d.icon} ${d.label} — Add Arrived Stock</h2>
@@ -1069,7 +1118,7 @@ function renderEodForm() {
     return;
   }
 
-  let html = stepTabsHtml() + `
+  let html = stepTabsHtml() + inventorySearchHtml() + `
     <div class="section-header">
       <div>
         <h2>${d.icon} ${d.label} — End-of-Day ${term} Inventory</h2>

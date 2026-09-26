@@ -195,6 +195,33 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .name-input:focus { outline: none; border-color: var(--accent); }
 .name-input::placeholder { color: var(--text-muted); }
 
+/* INVENTORY SEARCH BAR */
+.inv-search-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 14px;
+  margin-bottom: 1.25rem; max-width: 420px;
+  transition: border-color 0.15s;
+}
+.inv-search-bar:focus-within { border-color: var(--accent); }
+.inv-search-icon { font-size: 14px; color: var(--text-muted); flex-shrink: 0; }
+.inv-search-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text-primary);
+  min-width: 0;
+}
+.inv-search-input::placeholder { color: var(--text-muted); }
+.inv-search-clear {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 13px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+  display: none; flex-shrink: 0;
+}
+.inv-search-clear:hover { color: var(--danger); }
+.inv-search-bar.has-query .inv-search-clear { display: inline-block; }
+.inv-search-no-results {
+  padding: 16px 20px; font-size: 13px; color: var(--text-muted); text-align: center;
+}
+
 /* INVENTORY TABLE */
 .inv-card {
   background: var(--surface); border: 1px solid var(--border);
