@@ -160,6 +160,31 @@ function multiDeptPatch(depts, stores) {
   return patch;
 }
 
+/* For ARRAY-type fields (customItems, customSections) specifically:
+   Firestore's merge:true deep-merges MAP fields, but replaces array
+   fields wholesale. Resending a whole array — even scoped to one
+   department via deptPatch/multiDeptPatch — can still let one admin's
+   save silently erase another admin's just-added item/section if both
+   touched the same department around the same time. arrayUnion appends
+   instead, so concurrent additions stack rather than clobber.
+   `byField` shape: { customItems: { bar: [newItemA, newItemB] }, ... } —
+   only include departments that actually gained new entries. */
+function arrayUnionDeptPatch(byField) {
+  const patch = {};
+  Object.keys(byField).forEach(fieldName => {
+    const byDept = byField[fieldName];
+    const fieldPatch = {};
+    Object.keys(byDept).forEach(dept => {
+      const entries = byDept[dept];
+      if (entries && entries.length) {
+        fieldPatch[dept] = firebase.firestore.FieldValue.arrayUnion(...entries);
+      }
+    });
+    if (Object.keys(fieldPatch).length) patch[fieldName] = fieldPatch;
+  });
+  return patch;
+}
+
 /*
   CARRY-OVER LOGIC
   ─────────────────
@@ -512,7 +537,13 @@ function addCustomSection(dept) {
   if (!customSections[dept]) customSections[dept] = [];
   customSections[dept].push(name);
   if (input) input.value = '';
-  saveToFirebase(deptPatch(dept, { customSections }));
+  // arrayUnion, NOT a full-array resend: customSections is an array, and
+  // Firestore's merge only deep-merges MAP fields — arrays get replaced
+  // wholesale. If two admins both add a section to the same department
+  // around the same time, resending the whole array would let whoever
+  // saves second silently erase the other's new section. Appending just
+  // this one name avoids that entirely.
+  saveToFirebase({ customSections: { [dept]: firebase.firestore.FieldValue.arrayUnion(name) } });
   renderWeeklyForm();
 }
 
@@ -948,8 +979,12 @@ function addCustomItem(dept) {
   }
 
   if (!customItems[dept]) customItems[dept] = [];
-  customItems[dept].push({ name, unit, par, section });
-  saveToFirebase(deptPatch(dept, { customItems }));
+  const newItem = { name, unit, par, section };
+  customItems[dept].push(newItem);
+  // Same fix as addCustomSection: arrayUnion the one new item instead of
+  // resending the whole customItems array, so two admins adding different
+  // items to the same department at the same time don't erase each other.
+  saveToFirebase({ customItems: { [dept]: firebase.firestore.FieldValue.arrayUnion(newItem) } });
   renderWeeklyForm();
 }
 
@@ -2121,7 +2156,8 @@ function recoverCustomItemsFromDate(dateStr) {
     const d = snap.data();
     let recovered = 0;
     const recoveredNames = [];
-    const touchedDepts = new Set();
+    const newSectionsByDept = {}; // dept -> [names...] actually added, for arrayUnion
+    const newItemsByDept    = {}; // dept -> [item objs...] actually added, for arrayUnion
 
     Object.keys(DEPTS).forEach(dept => {
       // Recover custom sections
@@ -2132,7 +2168,7 @@ function recoverCustomItemsFromDate(dateStr) {
           if (!customSections[dept].includes(name)) {
             customSections[dept].push(name);
             recovered++;
-            touchedDepts.add(dept);
+            (newSectionsByDept[dept] = newSectionsByDept[dept] || []).push(name);
             recoveredNames.push(`Section "${name}" (${DEPTS[dept].label})`);
           }
         });
@@ -2146,7 +2182,7 @@ function recoverCustomItemsFromDate(dateStr) {
           if (!exists) {
             customItems[dept].push(item);
             recovered++;
-            touchedDepts.add(dept);
+            (newItemsByDept[dept] = newItemsByDept[dept] || []).push(item);
             recoveredNames.push(`Item "${item.name}" (${DEPTS[dept].label})`);
           }
         });
@@ -2157,9 +2193,14 @@ function recoverCustomItemsFromDate(dateStr) {
       alert('Nothing new to recover from ' + dateStr + ' — those sections/items already appear to be present today.');
       return;
     }
-    // Scope the write to only the department(s) that actually gained
-    // something, not every department this tab has in memory.
-    saveToFirebase(multiDeptPatch([...touchedDepts], { customSections, customItems }));
+    // arrayUnion just the newly-recovered names/items per department,
+    // rather than resending the whole array — same reasoning as
+    // addCustomItem/addCustomSection: arrays replace wholesale on merge,
+    // so a full resend could clobber something another admin just added.
+    saveToFirebase(arrayUnionDeptPatch({
+      customSections: newSectionsByDept,
+      customItems:    newItemsByDept
+    }));
     renderCurrentView();
     alert('Recovered ' + recovered + ' item(s)/section(s) from ' + dateStr + ':\n\n' + recoveredNames.join('\n') + '\n\nSaved to today.');
   }).catch(err => alert('Error loading ' + dateStr + ': ' + err.message));
@@ -2179,7 +2220,8 @@ function recoverAllRecentCustomItems(daysBack = 14) {
       const recoveredNames = [];
       const checkedDates = [];
       const foundDates = [];
-      const touchedDepts = new Set();
+      const newSectionsByDept = {};
+      const newItemsByDept    = {};
 
       snaps.forEach((snap, i) => {
         const dateStr = dateKeys[i];
@@ -2195,7 +2237,7 @@ function recoverAllRecentCustomItems(daysBack = 14) {
             if (!customSections[dept].includes(name)) {
               customSections[dept].push(name);
               recovered++;
-              touchedDepts.add(dept);
+              (newSectionsByDept[dept] = newSectionsByDept[dept] || []).push(name);
               recoveredNames.push(`Section "${name}" (${DEPTS[dept].label}) — from ${dateStr}`);
             }
           });
@@ -2207,7 +2249,7 @@ function recoverAllRecentCustomItems(daysBack = 14) {
             if (!exists) {
               customItems[dept].push(item);
               recovered++;
-              touchedDepts.add(dept);
+              (newItemsByDept[dept] = newItemsByDept[dept] || []).push(item);
               recoveredNames.push(`Item "${item.name}" (${DEPTS[dept].label}) — from ${dateStr}`);
             }
           });
@@ -2221,9 +2263,12 @@ function recoverAllRecentCustomItems(daysBack = 14) {
           + '(try recoverAllRecentCustomItems(30) for a longer scan).');
         return;
       }
-      // Scope the write to only the department(s) that actually gained
-      // something across the scanned days.
-      saveToFirebase(multiDeptPatch([...touchedDepts], { customSections, customItems }));
+      // arrayUnion the newly-recovered names/items — same reasoning as
+      // recoverCustomItemsFromDate: never resend a whole array field.
+      saveToFirebase(arrayUnionDeptPatch({
+        customSections: newSectionsByDept,
+        customItems:    newItemsByDept
+      }));
       renderCurrentView();
       Object.keys(DEPTS).forEach(dk => updateBadge(dk));
       alert('Recovered ' + recovered + ' item(s)/section(s):\n\n' + recoveredNames.join('\n') + '\n\nSaved to today.');
