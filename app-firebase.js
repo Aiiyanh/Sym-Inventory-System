@@ -101,16 +101,63 @@ function getDateKeyOffset(daysAgo) {
   return formatLocalDateKey(d);
 }
 
-function saveToFirebase() {
-  const payload = {
-    weeklyStock, arrivedStock, soldStock,
-    arrivedLog, eodLog, customItems, customSections,
-    weeklySubmitted, eodSubmitted, editUnlocked,
-    lastSaved: new Date().toISOString()
-  };
-  inventoryCol.doc(getDateKey()).set(payload)
+/*
+  saveToFirebase(patch)
+  ──────────────────────
+  THE FIX FOR MULTI-USER DATA LOSS:
+  This used to resend this browser tab's *entire* in-memory snapshot —
+  every department's weeklyStock/arrivedStock/customItems/etc. — with a
+  plain `.set(payload)` (no merge). That meant ANY save, by ANY user, in
+  ANY department, overwrote the WHOLE cloud document with whatever this
+  tab happened to have cached. If that tab hadn't yet received another
+  department's latest change (or another person's edit was still mid-flight),
+  the save would silently erase it. That's why "the other user's typed data
+  disappears when someone else saves."
+
+  The fix has two parts:
+  1. `{ merge: true }` — Firestore deep-merges nested map fields instead of
+     replacing the whole document.
+  2. Every call site now passes an explicit, minimal `patch` containing
+     ONLY the department(s)/fields it actually changed (see deptPatch()
+     below), instead of the whole in-memory state. Untouched departments
+     are never even mentioned, so merge:true leaves them exactly as they
+     are in the cloud — someone else's concurrent edit in another
+     department (or another field) can never be clobbered.
+*/
+function saveToFirebase(patch) {
+  const payload = Object.assign({ lastSaved: new Date().toISOString() }, patch || {});
+  inventoryCol.doc(getDateKey()).set(payload, { merge: true })
     .then(() => showSyncBadge('✅ Saved to cloud'))
     .catch(err => showSyncBadge('❌ ' + err.message));
+}
+
+/* Builds a save patch scoped to ONE department across the given stores,
+   e.g. deptPatch('bar', { weeklyStock, weeklySubmitted }) →
+   { weeklyStock: { bar: {...} }, weeklySubmitted: { bar: true } }.
+   Other departments are never mentioned, so they can't be overwritten. */
+function deptPatch(dept, stores) {
+  const patch = {};
+  Object.keys(stores).forEach(name => { patch[name] = { [dept]: stores[name][dept] }; });
+  return patch;
+}
+
+/* Builds a save patch spanning every department — for genuinely
+   cross-department admin actions only (bulk reset/recovery tools).
+   Everyday per-department saves should use deptPatch() instead. */
+function allDeptPatch(stores) {
+  return multiDeptPatch(deptKeys, stores);
+}
+
+/* Builds a save patch spanning a specific SET of departments (not
+   necessarily all of them) — used when a recovery/carry-over action only
+   touched a handful of departments that had no data yet today. */
+function multiDeptPatch(depts, stores) {
+  const patch = {};
+  Object.keys(stores).forEach(name => {
+    patch[name] = {};
+    depts.forEach(dept => { patch[name][dept] = stores[name][dept]; });
+  });
+  return patch;
 }
 
 /*
@@ -177,9 +224,13 @@ function loadFromFirebase(callback) {
     // (because another department saved first), each department that has
     // NOTHING yet today gets its own backward search — so one department
     // saving first never blocks another department's data from loading.
-    fillMissingDepts(recoveredAny => {
-      if (recoveredAny) {
-        saveToFirebase();
+    fillMissingDepts(recoveredDepts => {
+      if (recoveredDepts.length) {
+        // Scope the write to just the department(s) actually recovered —
+        // never resend departments this tab didn't touch.
+        saveToFirebase(multiDeptPatch(recoveredDepts, {
+          weeklyStock, customItems, customSections, weeklySubmitted
+        }));
         showSyncBadge('📦 Loaded your previously encoded data');
       } else if (todayData) {
         showSyncBadge('✅ Data loaded');
@@ -198,7 +249,8 @@ function loadFromFirebase(callback) {
    no custom sections, no weekly stock), search backward up to 120 days for
    that department's own last saved data and carry it forward. Runs
    per-department so one department's early save today can't block another
-   department's recovery. */
+   department's recovery. Calls back with the array of department keys
+   that were actually recovered (possibly empty). */
 function fillMissingDepts(cb) {
   const needing = deptKeys.filter(dept => {
     const hasItems    = (customItems[dept] || []).length > 0;
@@ -206,18 +258,18 @@ function fillMissingDepts(cb) {
     const hasWeekly    = weeklyStock[dept] && Object.keys(weeklyStock[dept]).length > 0;
     return !hasItems && !hasSections && !hasWeekly;
   });
-  if (!needing.length) { cb(false); return; }
+  if (!needing.length) { cb([]); return; }
 
   let remaining = needing.length;
-  let recoveredAny = false;
+  const recoveredDepts = [];
   needing.forEach(dept => {
     findMostRecentDeptData(dept, 1, 120, (dayData) => {
       if (dayData) {
         applyCarryOverForDept(dept, dayData);
-        recoveredAny = true;
+        recoveredDepts.push(dept);
       }
       remaining--;
-      if (remaining === 0) cb(recoveredAny);
+      if (remaining === 0) cb(recoveredDepts);
     });
   });
 }
@@ -245,7 +297,24 @@ function subscribeRealtime() {
     const d = docSnap.exists ? docSnap.data() : null;
     if (!d) return;
     mergeState(d);
+
+    // A save by ANY user, in ANY department, fires this listener for
+    // EVERY connected tab — and re-rendering rebuilds the form's HTML from
+    // scratch. Without this, someone mid-typing a quantity (not yet
+    // submitted, so it only exists in the DOM, not in the JS state) would
+    // see it silently vanish the moment someone else's save reaches them.
+    // So: snapshot whatever's currently typed but unsaved, re-render, then
+    // restore it into any field that came back empty.
+    const unsavedValues = {};
+    document.querySelectorAll('#main-content input, #main-content textarea').forEach(el => {
+      if (el.id && el.value !== '') unsavedValues[el.id] = el.value;
+    });
     renderCurrentView();
+    Object.keys(unsavedValues).forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.value === '') el.value = unsavedValues[id];
+    });
+
     Object.keys(DEPTS).forEach(dk => updateBadge(dk));
     showSyncBadge('🔄 Synced');
   }, err => {
@@ -427,7 +496,7 @@ function addCustomSection(dept) {
   if (!customSections[dept]) customSections[dept] = [];
   customSections[dept].push(name);
   if (input) input.value = '';
-  saveToFirebase();
+  saveToFirebase(deptPatch(dept, { customSections }));
   renderWeeklyForm();
 }
 
@@ -444,7 +513,7 @@ function removeCustomSection(dept, idx) {
   if (!confirm(msg)) return;
   affected.forEach(it => { it.section = ''; });
   customSections[dept].splice(idx, 1);
-  saveToFirebase();
+  saveToFirebase(deptPatch(dept, { customSections, customItems }));
   renderWeeklyForm();
 }
 
@@ -864,7 +933,7 @@ function addCustomItem(dept) {
 
   if (!customItems[dept]) customItems[dept] = [];
   customItems[dept].push({ name, unit, par, section });
-  saveToFirebase();
+  saveToFirebase(deptPatch(dept, { customItems }));
   renderWeeklyForm();
 }
 
@@ -885,7 +954,7 @@ function removeCustomItem(dept, idx) {
       Object.assign(weeklyStock[dept], remaining);
     }
   }
-  saveToFirebase();
+  saveToFirebase(deptPatch(dept, { customItems, weeklyStock }));
   renderWeeklyForm();
 }
 
@@ -916,7 +985,10 @@ function resetAllCustomItems() {
     });
   });
 
-  saveToFirebase();
+  // This one genuinely IS a deliberate cross-department action, so it's
+  // the correct, explicit use of allDeptPatch — everyday actions above use
+  // deptPatch() to stay scoped to the one department they touched.
+  saveToFirebase(allDeptPatch({ customItems, weeklyStock, arrivedStock, soldStock }));
   renderCurrentView();
   deptKeys.forEach(dk => updateBadge(dk));
   showSyncBadge('🗑️ All custom items reset across every department');
@@ -945,7 +1017,7 @@ function requireName(inputId) {
 function toggleEditUnlock(dept) {
   if (getUserDept() !== 'all') return; // guard: only admin/manager can call this
   editUnlocked[dept] = !editUnlocked[dept];
-  saveToFirebase();
+  saveToFirebase(deptPatch(dept, { editUnlocked }));
   renderWeeklyForm();
 }
 window.toggleEditUnlock = toggleEditUnlock;
@@ -974,7 +1046,7 @@ function submitWeekly(dept) {
   weeklySubmitted[dept] = true;
   editUnlocked[dept] = false; // re-lock automatically once the correction has been made
   updateBadge(dept);
-  saveToFirebase();
+  saveToFirebase(deptPatch(dept, { weeklyStock, weeklySubmitted, editUnlocked }));
   setStep('addstock'); // jump straight into Add Arrived Stock after weekly stock is saved
 }
 
@@ -1084,6 +1156,8 @@ function submitArrived(dept) {
   const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   if (!arrivedStock[dept]) arrivedStock[dept] = {};
   let added = 0;
+  const newEntries = [];      // just what THIS save adds, for arrayUnion below
+  const increments  = {};      // per-item deltas, for FieldValue.increment below
 
   d.sections.forEach((sec, si) => {
     sec.items.forEach((item, ii) => {
@@ -1091,7 +1165,8 @@ function submitArrived(dept) {
       const val = parseFloat((document.getElementById(`a-${dept}-${si}-${ii}`) || {}).value) || 0;
       if (val > 0) {
         arrivedStock[dept][key] = (parseFloat(arrivedStock[dept][key]) || 0) + val;
-        arrivedLog.push({ dept: d.label, item: item.name, qty: val, unit: item.unit, time, name });
+        increments[key] = val;
+        newEntries.push({ dept: d.label, item: item.name, qty: val, unit: item.unit, time, name });
         added++;
       }
     });
@@ -1101,14 +1176,30 @@ function submitArrived(dept) {
     const val = parseFloat((document.getElementById(`a-${dept}-99-${ii}`) || {}).value) || 0;
     if (val > 0) {
       arrivedStock[dept][key] = (parseFloat(arrivedStock[dept][key]) || 0) + val;
-      arrivedLog.push({ dept: d.label, item: item.name, qty: val, unit: item.unit, time, name });
+      increments[key] = val;
+      newEntries.push({ dept: d.label, item: item.name, qty: val, unit: item.unit, time, name });
       added++;
     }
   });
 
   if (added === 0) { alert('No quantities entered. Please enter at least one.'); return; }
+  newEntries.forEach(e => arrivedLog.push(e));
   updateBadge(dept);
-  saveToFirebase();
+
+  // arrivedStock: send per-item ATOMIC increments rather than the computed
+  // sum, so even two people adding stock for the same item at the same
+  // moment both land correctly instead of one overwriting the other.
+  // arrivedLog: arrayUnion only the entries THIS save added, instead of
+  // resending the whole array, so concurrent log entries from other
+  // departments/users are never overwritten.
+  const arrivedStockPatch = {};
+  Object.keys(increments).forEach(key => {
+    arrivedStockPatch[key] = firebase.firestore.FieldValue.increment(increments[key]);
+  });
+  saveToFirebase({
+    arrivedStock: { [dept]: arrivedStockPatch },
+    arrivedLog: firebase.firestore.FieldValue.arrayUnion(...newEntries)
+  });
   renderAddStockForm();
 }
 
@@ -1276,9 +1367,13 @@ function submitEod(dept) {
   soldStock[dept]['_notes'] = notesEl ? notesEl.value : '';
   soldStock[dept]['_time']  = time;
   eodSubmitted[dept] = true;
-  eodLog.push({ dept: d.label, icon: d.icon, submitter: name, time });
+  const newLogEntry = { dept: d.label, icon: d.icon, submitter: name, time };
+  eodLog.push(newLogEntry);
   updateBadge(dept);
-  saveToFirebase();
+  saveToFirebase(Object.assign(
+    deptPatch(dept, { soldStock, eodSubmitted }),
+    { eodLog: firebase.firestore.FieldValue.arrayUnion(newLogEntry) }
+  ));
   renderEodForm();
 }
 
@@ -2010,6 +2105,7 @@ function recoverCustomItemsFromDate(dateStr) {
     const d = snap.data();
     let recovered = 0;
     const recoveredNames = [];
+    const touchedDepts = new Set();
 
     Object.keys(DEPTS).forEach(dept => {
       // Recover custom sections
@@ -2020,6 +2116,7 @@ function recoverCustomItemsFromDate(dateStr) {
           if (!customSections[dept].includes(name)) {
             customSections[dept].push(name);
             recovered++;
+            touchedDepts.add(dept);
             recoveredNames.push(`Section "${name}" (${DEPTS[dept].label})`);
           }
         });
@@ -2033,6 +2130,7 @@ function recoverCustomItemsFromDate(dateStr) {
           if (!exists) {
             customItems[dept].push(item);
             recovered++;
+            touchedDepts.add(dept);
             recoveredNames.push(`Item "${item.name}" (${DEPTS[dept].label})`);
           }
         });
@@ -2043,7 +2141,9 @@ function recoverCustomItemsFromDate(dateStr) {
       alert('Nothing new to recover from ' + dateStr + ' — those sections/items already appear to be present today.');
       return;
     }
-    saveToFirebase();
+    // Scope the write to only the department(s) that actually gained
+    // something, not every department this tab has in memory.
+    saveToFirebase(multiDeptPatch([...touchedDepts], { customSections, customItems }));
     renderCurrentView();
     alert('Recovered ' + recovered + ' item(s)/section(s) from ' + dateStr + ':\n\n' + recoveredNames.join('\n') + '\n\nSaved to today.');
   }).catch(err => alert('Error loading ' + dateStr + ': ' + err.message));
@@ -2063,6 +2163,7 @@ function recoverAllRecentCustomItems(daysBack = 14) {
       const recoveredNames = [];
       const checkedDates = [];
       const foundDates = [];
+      const touchedDepts = new Set();
 
       snaps.forEach((snap, i) => {
         const dateStr = dateKeys[i];
@@ -2078,6 +2179,7 @@ function recoverAllRecentCustomItems(daysBack = 14) {
             if (!customSections[dept].includes(name)) {
               customSections[dept].push(name);
               recovered++;
+              touchedDepts.add(dept);
               recoveredNames.push(`Section "${name}" (${DEPTS[dept].label}) — from ${dateStr}`);
             }
           });
@@ -2089,6 +2191,7 @@ function recoverAllRecentCustomItems(daysBack = 14) {
             if (!exists) {
               customItems[dept].push(item);
               recovered++;
+              touchedDepts.add(dept);
               recoveredNames.push(`Item "${item.name}" (${DEPTS[dept].label}) — from ${dateStr}`);
             }
           });
@@ -2102,7 +2205,9 @@ function recoverAllRecentCustomItems(daysBack = 14) {
           + '(try recoverAllRecentCustomItems(30) for a longer scan).');
         return;
       }
-      saveToFirebase();
+      // Scope the write to only the department(s) that actually gained
+      // something across the scanned days.
+      saveToFirebase(multiDeptPatch([...touchedDepts], { customSections, customItems }));
       renderCurrentView();
       Object.keys(DEPTS).forEach(dk => updateBadge(dk));
       alert('Recovered ' + recovered + ' item(s)/section(s):\n\n' + recoveredNames.join('\n') + '\n\nSaved to today.');
