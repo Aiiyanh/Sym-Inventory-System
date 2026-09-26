@@ -300,20 +300,36 @@ function subscribeRealtime() {
 
     // A save by ANY user, in ANY department, fires this listener for
     // EVERY connected tab — and re-rendering rebuilds the form's HTML from
-    // scratch. Without this, someone mid-typing a quantity (not yet
-    // submitted, so it only exists in the DOM, not in the JS state) would
-    // see it silently vanish the moment someone else's save reaches them.
-    // So: snapshot whatever's currently typed but unsaved, re-render, then
-    // restore it into any field that came back empty.
+    // scratch, which repopulates every field back to its saved/default
+    // value. Someone mid-typing a quantity (not yet submitted, so it only
+    // exists in the DOM, not in the JS state) would otherwise see it
+    // silently replaced the moment someone else's save reaches them —
+    // even if their field wasn't blank to begin with.
+    // Fix: snapshot every field's current value (and which one is
+    // focused) BEFORE re-rendering, then force those exact values back
+    // in afterward, unconditionally — your in-progress typing always
+    // wins over a redraw until you actually submit it.
+    const activeId  = document.activeElement ? document.activeElement.id : null;
+    const activeSel = (activeId && document.activeElement.setSelectionRange)
+      ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
     const unsavedValues = {};
-    document.querySelectorAll('#main-content input, #main-content textarea').forEach(el => {
-      if (el.id && el.value !== '') unsavedValues[el.id] = el.value;
+    document.querySelectorAll('#main-content input, #main-content textarea, #main-content select').forEach(el => {
+      if (el.id) unsavedValues[el.id] = el.value;
     });
     renderCurrentView();
     Object.keys(unsavedValues).forEach(id => {
       const el = document.getElementById(id);
-      if (el && el.value === '') el.value = unsavedValues[id];
+      if (el) el.value = unsavedValues[id];
     });
+    if (activeId) {
+      const el = document.getElementById(activeId);
+      if (el) {
+        el.focus();
+        if (activeSel && el.setSelectionRange) {
+          try { el.setSelectionRange(activeSel[0], activeSel[1]); } catch (e) {}
+        }
+      }
+    }
 
     Object.keys(DEPTS).forEach(dk => updateBadge(dk));
     showSyncBadge('🔄 Synced');
