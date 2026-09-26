@@ -1850,7 +1850,7 @@ function showLoginScreen() {
   overlay.id = 'login-overlay';
   overlay.innerHTML = `
     <div id="login-card">
-      <div id="login-logo">🏨</div>
+      <img id="login-logo" src="icon-192.png" alt="Sol Mar Iloilo Family Beach Resort logo">
       <div id="login-title">Resort Inventory</div>
       <div id="login-subtitle">Sign in to continue</div>
 
@@ -1900,7 +1900,9 @@ function showLoginScreen() {
       display: flex; flex-direction: column; gap: 0;
     }
     #login-logo {
-      font-size: 48px; text-align: center; margin-bottom: 8px;
+      display: block; width: 72px; height: 72px; margin: 0 auto 14px;
+      border-radius: 16px; object-fit: cover;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
     }
     #login-title {
       font-size: 22px; font-weight: 800; text-align: center;
