@@ -802,7 +802,9 @@ function renderWeeklyForm() {
         <span class="status-pill ${st.cls}" id="wst-${currentDept}-99-${ii}">${st.label}</span>
       </td>
       <td style="text-align:center">
-        ${isAdmin ? `<button onclick="removeCustomItem('${currentDept}',${ii})"
+        ${isAdmin ? `<button onclick="editCustomItem('${currentDept}',${ii})" title="Edit unit / par"
+          style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;margin-right:6px;">✏️</button>
+        <button onclick="removeCustomItem('${currentDept}',${ii})"
           style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:16px;">✕</button>` : ''}
       </td></tr>`;
   };
@@ -1006,6 +1008,35 @@ function removeCustomItem(dept, idx) {
     }
   }
   saveToFirebase(deptPatch(dept, { customItems, weeklyStock }));
+  renderWeeklyForm();
+}
+
+/* Lets an admin/manager correct a custom item's unit or par level after
+   it's already been added — without deleting and re-adding it (which
+   would also wipe its recorded stock history). Name isn't editable here
+   on purpose: it's used as the matching key elsewhere (duplicate checks,
+   carry-over between days), so renaming needs more care than a quick edit. */
+function editCustomItem(dept, idx) {
+  if (getUserDept() !== 'all') { alert('Only admin/manager accounts can edit items.'); return; }
+  const item = (customItems[dept] || [])[idx];
+  if (!item) return;
+
+  const newUnit = prompt(`Unit for "${item.name}":`, item.unit);
+  if (newUnit === null) return; // cancelled
+  const trimmedUnit = newUnit.trim();
+  if (!trimmedUnit) { alert('Unit cannot be empty.'); return; }
+
+  const newParStr = prompt(`Par level for "${item.name}":`, item.par);
+  if (newParStr === null) return; // cancelled
+  const newPar = parseFloat(newParStr);
+  if (isNaN(newPar) || newPar < 0) { alert('Please enter a valid par level (0 or higher).'); return; }
+
+  item.unit = trimmedUnit;
+  item.par  = newPar;
+  // This is an in-place edit of an existing array element, not an append,
+  // so it can't use arrayUnion — resending the department's array is the
+  // only option here (same trade-off as removeCustomItem above).
+  saveToFirebase(deptPatch(dept, { customItems }));
   renderWeeklyForm();
 }
 
