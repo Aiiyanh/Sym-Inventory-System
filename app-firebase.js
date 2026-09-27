@@ -2027,7 +2027,7 @@ function showLoginScreen() {
   overlay.id = 'login-overlay';
   overlay.innerHTML = `
     <div id="login-card">
-      <img id="login-logo" src="icon-192.png" alt="Sol Mar Iloilo Family Beach Resort logo">
+      <img id="login-logo" src="icon-192.png" alt="Sol y Mar Iloilo Family Beach Resort logo">
       <div id="login-title">Resort Inventory</div>
       <div id="login-subtitle">Sign in to continue</div>
 

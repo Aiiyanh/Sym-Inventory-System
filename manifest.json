@@ -1,5 +1,5 @@
 {
-  "name": "Sol Mar Iloilo — Daily Inventory System",
+  "name": "Sol y Mar Iloilo — Daily Inventory System",
   "short_name": "SolMar Inventory",
   "description": "Daily stock entry, alerts, and purchase order tracking across Housekeeping, Bar, Kitchen, and Pizzeria.",
   "start_url": "./index.html",
