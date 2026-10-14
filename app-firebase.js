@@ -457,7 +457,7 @@ const DEPTS = {
   kitchen: {
     label: 'Kitchen', icon: '🍽️',
     sections: [
-      { name: 'Processed Stocks', items: [] },
+      { name: 'Protein (Perishable)', items: [] },
       { name: 'Vegetables & Dairy', items: [] },
       { name: 'Dry Goods', items: [] },
     ]
