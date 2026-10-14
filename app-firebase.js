@@ -457,7 +457,7 @@ const DEPTS = {
   kitchen: {
     label: 'Kitchen', icon: '🍽️',
     sections: [
-      { name: 'Protein (Perishable)', items: [] },
+      { name: 'Processed stocks', items: [] },   // was 'Protein (Perishable)'
       { name: 'Vegetables & Dairy', items: [] },
       { name: 'Dry Goods', items: [] },
     ]
@@ -470,6 +470,14 @@ const DEPTS = {
       { name: 'Packaging', items: [] },
     ]
   }
+};
+
+/* Old section name → new section name. Custom items store their section
+   by name, so items saved under a previous name would otherwise fall into
+   "Custom / Added Items" after a rename. groupCustomItemsBySection()
+   translates old names using this map. */
+const SECTION_RENAMES = {
+  'Protein (Perishable)': 'Processed stocks',
 };
 
 /* ── IN-MEMORY STATE ── */
@@ -512,7 +520,8 @@ function getSectionsForDept(dept) {
 
 /* Buckets every custom item in a dept by which section it was placed into.
    Items whose section is missing or no longer exists fall into "unassigned"
-   (shown as the "Custom / Added Items" catch-all). */
+   (shown as the "Custom / Added Items" catch-all). Items saved under an
+   old section name (see SECTION_RENAMES) are moved to the new name. */
 function groupCustomItemsBySection(dept) {
   const allCustoms   = customItems[dept] || [];
   const sectionNames = getSectionsForDept(dept).map(s => s.name);
@@ -520,6 +529,8 @@ function groupCustomItemsBySection(dept) {
   sectionNames.forEach(n => { bySection[n] = []; });
   const unassigned = [];
   allCustoms.forEach((item, ii) => {
+    // Translate old section names to their renamed versions
+    if (item.section && SECTION_RENAMES[item.section]) item.section = SECTION_RENAMES[item.section];
     if (item.section && bySection[item.section]) bySection[item.section].push({ item, ii });
     else unassigned.push({ item, ii });
   });
